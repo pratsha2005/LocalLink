@@ -4,13 +4,15 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+
 	"github.com/LocalLink/internal/auth"
 	"github.com/LocalLink/internal/config"
 	"github.com/LocalLink/internal/database"
 	"github.com/LocalLink/internal/models"
-	"net/http"
-	"strconv"
-
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -146,4 +148,115 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(response)
+}
+
+
+// internal/api/handlers.go
+// ... (keep existing code)
+
+// -- NEW HANDLERS --
+
+func (h *Handler) GetUserProfile(w http.ResponseWriter, r *http.Request) {
+	userID, err := auth.GetUserIDFromContext(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	user, err := h.store.GetUserByID(r.Context(), userID)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "User not found")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, user)
+}
+
+func (h *Handler) CreateOrder(w http.ResponseWriter, r *http.Request) {
+	buyerID, err := auth.GetUserIDFromContext(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	var input models.CreateOrderInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	order, err := h.store.CreateOrder(r.Context(), input, buyerID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to create order: %v", err))
+		return
+	}
+	respondWithJSON(w, http.StatusCreated, order)
+}
+
+
+func (h *Handler) GetUserOrders(w http.ResponseWriter, r *http.Request) {
+	userID, err := auth.GetUserIDFromContext(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	orders, err := h.store.GetOrdersForUser(r.Context(), userID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not fetch orders")
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, orders)
+}
+
+
+func (h *Handler) CreateReview(w http.ResponseWriter, r *http.Request) {
+	userID, err := auth.GetUserIDFromContext(r.Context())
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	productIDStr := chi.URLParam(r, "productID")
+	productID, err := strconv.Atoi(productIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid product ID")
+		return
+	}
+
+	var input models.CreateReviewInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	review := models.Review{
+		ProductID: productID,
+		UserID:    userID,
+		Rating:    input.Rating,
+		Comment:   input.Comment,
+	}
+
+	if err := h.store.CreateReview(r.Context(), &review); err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to create review")
+		return
+	}
+
+	respondWithJSON(w, http.StatusCreated, review)
+}
+
+
+func (h *Handler) GetProductReviews(w http.ResponseWriter, r *http.Request) {
+	productIDStr := chi.URLParam(r, "productID")
+	productID, err := strconv.Atoi(productIDStr)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid product ID")
+		return
+	}
+
+	reviews, err := h.store.GetReviewsForProduct(r.Context(), productID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Could not fetch reviews")
+		return
+	}
+	respondWithJSON(w, http.StatusOK, reviews)
 }
