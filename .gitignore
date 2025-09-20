@@ -32,3 +32,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+
+locallink-frontend/.gitignore
+locallink-frontend/node_modules
+locallink-frontend/README.md
