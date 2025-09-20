@@ -1,28 +1,28 @@
-// cmd/api/main.go
 package main
 
 import (
 	"fmt"
+	"log"
+	"net/http"
+
 	"github.com/LocalLink/internal/api"
 	"github.com/LocalLink/internal/config"
 	"github.com/LocalLink/internal/database"
-	"log"
-	"net/http"
+	"github.com/LocalLink/internal/websocket"
 )
 
 func main() {
-	// 1. Load Configuration
 	cfg := config.Load()
 
-	// 2. Connect to Database
 	dbPool := database.Connect(cfg.DatabaseURL)
 	defer dbPool.Close()
 	store := database.NewStore(dbPool)
 
-	// 3. Initialize Router
-	router := api.NewRouter(store, cfg)
+	hub := websocket.NewHub()
+	go hub.Run()
 
-	// 4. Start Server
+	router := api.NewRouter(store, cfg, hub)
+
 	serverAddr := ":8080"
 	fmt.Printf("Starting server on %s\n", serverAddr)
 	if err := http.ListenAndServe(serverAddr, router); err != nil {

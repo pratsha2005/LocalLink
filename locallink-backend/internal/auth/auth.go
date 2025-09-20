@@ -1,14 +1,14 @@
-// internal/auth/auth.go
 package auth
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/LocalLink/internal/config"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/LocalLink/internal/config"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -34,24 +34,25 @@ func GenerateJWT(userID int, cfg *config.Config) (string, error) {
 		"userID":     userID,
 		"exp":        time.Now().Add(time.Hour * 24).Unix(),
 	}
-
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(cfg.JWTSecret))
 }
 
-// AuthMiddleware decodes the share session and packs the session into context
 func AuthMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, "Authorization header required", http.StatusUnauthorized)
-				return
+			tokenString := r.URL.Query().Get("token")
+			if tokenString == "" {
+				authHeader := r.Header.Get("Authorization")
+				if authHeader == "" {
+					http.Error(w, "Authorization required", http.StatusUnauthorized)
+					return
+				}
+				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
 			}
 
-			tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-			if tokenString == authHeader {
-				http.Error(w, "Could not find bearer token in Authorization header", http.StatusUnauthorized)
+			if tokenString == "" {
+				http.Error(w, "Could not find token", http.StatusUnauthorized)
 				return
 			}
 
@@ -75,7 +76,6 @@ func AuthMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 					return
 				}
 			}
-
 			http.Error(w, "Invalid token claims", http.StatusUnauthorized)
 		})
 	}
