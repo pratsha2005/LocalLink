@@ -10,22 +10,36 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/rs/cors" // <-- IMPORT THE CORS LIBRARY
 )
 
 func NewRouter(store *database.Store, cfg *config.Config, hub *websocket.Hub) *chi.Mux {
 	r := chi.NewRouter()
 	h := NewHandler(store, cfg, hub)
 
+	// --- NEW: CORS Configuration ---
+	// This sets up the rules for which frontend origins are allowed to connect.
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:5173"}, // <-- YOUR REACT APP's URL
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300, // Maximum value not ignored by any major browsers
+	}).Handler
+
+	// --- Middleware Setup ---
+	r.Use(corsHandler) // <-- APPLY THE CORS MIDDLEWARE
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
-	// Public Routes
+	// --- Public Routes ---
 	r.Post("/register", h.RegisterUser)
 	r.Post("/login", h.LoginUser)
 	r.Get("/products/nearby", h.GetProductsNearby)
 	r.Get("/products/{productID}/reviews", h.GetProductReviews)
 
-	// Protected Routes
+	// --- Protected Routes ---
 	r.Group(func(r chi.Router) {
 		r.Use(auth.AuthMiddleware(cfg))
 
